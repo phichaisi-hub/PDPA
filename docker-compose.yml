@@ -1,40 +1,94 @@
-version: '3.8'
-
 services:
-  # บริการฐานข้อมูล MySQL
+  # 1. ฐานข้อมูล (รันปกติ)
   db:
-    image: mysql:8.0
-    container_name: ropa_mysql_db
+    image: mariadb:10.6
+    container_name: event-db
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: root_password_1234
-      MYSQL_DATABASE: ropa_db
-    ports:
-      - "3308:3306"
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: event_db
+      TZ: Asia/Bangkok  # เพิ่มบรรทัดนี้เพื่อให้ Database เก็บเวลาไทยด้วย
+    command: --default-time-zone="+07:00"
     volumes:
-      - mysql_data:/var/lib/mysql
-      # (ไม่บังคับ) ถ้าอยากให้สร้าง Table อัตโนมัติตั้งแต่เปิดตู้ สามารถนำสคริปต์ SQL ไปวางในโฟลเดอร์ initdb ได้
-      # - ./init.sql:/docker-entrypoint-initdb.dir/init.sql
+      - db_data:/var/lib/mysql
     networks:
-      - ropa_network
+      - event-net
 
-  # บริการเว็บแอปพลิเคชัน Flask
-  web:
-    build: .
-    container_name: ropa_web_app
+  # 2. phpMyAdmin (รันปกติที่ 8081)
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: event-phpmyadmin
     restart: always
-    ports:
-      - "8078:80"
-    environment:
-      - FLASK_ENV=development
-    # ให้รอจนกว่า db จะพร้อมทำงาน ค่อยเปิดตัวเว็บ
     depends_on:
       - db
+    ports:
+      - "8081:80"
+    environment:
+      PMA_HOST: db
+      MYSQL_ROOT_PASSWORD: rootpassword
     networks:
-      - ropa_network
+      - event-net
 
-volumes:
-  mysql_data: # เก็บข้อมูล MySQL ไว้ในเครื่อง ไม่ให้หายเวลาปิด container
+  # 3. เว็บเซิร์ฟเวอร์ (รันที่ 8080)
+  web:
+    image: php:8.1-apache
+    container_name: event-web
+    restart: always
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/var/www/html
+    # ปรับเหลือแค่นี้ เพื่อแก้ปัญหา Permission Denied
+    command: >
+      sh -c "chmod -R 777 /var/www/html && 
+      echo 'ServerName localhost' >> /etc/apache2/apache2.conf && 
+      docker-php-ext-install pdo pdo_mysql && 
+      apache2-foreground"
+    networks:
+      - event-net
+      
+  # 4. ตัวจัดการไฟล์ (รันปกติที่ 8099)
+  filemanager:
+    image: filebrowser/filebrowser:latest
+    container_name: event-filemanager
+    user: "0:0"
+    restart: always
+    ports:
+      - "8099:80"
+    volumes:
+      - .:/srv
+    # 🟢 เพิ่มคำสั่ง rm -f /tmp/filebrowser.db เพื่อล้างฐานข้อมูลเก่าที่ค้างอยู่ทิ้งก่อนเริ่มใหม่
+    entrypoint: >
+      sh -c "
+      chmod -R 755 /srv &&
+      rm -f /tmp/filebrowser.db &&
+      filebrowser config init --database=/tmp/filebrowser.db &&
+      filebrowser users add admin admin12345678 --perm.admin=true --database=/tmp/filebrowser.db &&
+      filebrowser --root=/srv --database=/tmp/filebrowser.db --address=0.0.0.0 --port=80"
+    networks:
+      - event-net
+  # 5. แอปสแกนเนอร์ (เปลี่ยนเป็นพอร์ต 3001)
+  scanner-app:
+    image: node:18-alpine
+    container_name: event-scanner
+    restart: always
+    working_dir: /app
+    ports:
+      - "3001:3001"
+    environment:
+      TZ: Asia/Bangkok  # เพิ่มบรรทัดนี้
+    volumes:
+      - ./scanner-app:/app
+    depends_on:
+      - db
+    # สั่งให้ npm install ก่อนรันเสมอเพื่อป้องกันกรณีขาด Library
+    command: sh -c "npm install && npm start"
+    networks:
+      - event-net
 
 networks:
-  ropa_network: # วงเน็ตเวิร์กจำลองให้ตู้คุยกันเองได้
+  event-net:
+    driver: bridge
+
+volumes:
+  db_data:
