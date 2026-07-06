@@ -1,23 +1,6 @@
 version: '3.8'
 
 services:
-  # บริการฐานข้อมูล MySQL
-  db:
-    image: mysql:8.0
-    container_name: ropa_mysql_db
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: root_password_1234
-      MYSQL_DATABASE: ropa_db
-    ports:
-      - "3307:3307"
-    volumes:
-      - mysql_data:/var/lib/mysql
-      # (ไม่บังคับ) ถ้าอยากให้สร้าง Table อัตโนมัติตั้งแต่เปิดตู้ สามารถนำสคริปต์ SQL ไปวางในโฟลเดอร์ initdb ได้
-      # - ./init.sql:/docker-entrypoint-initdb.dir/init.sql
-    networks:
-      - ropa_network
-
   # บริการเว็บแอปพลิเคชัน Flask
   web:
     build: .
