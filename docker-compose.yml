@@ -46,27 +46,28 @@ services:
     networks:
       - event-net
       
-  # 4. ตัวจัดการไฟล์ (รันที่พอร์ต 8099 จัดการไฟล์ของเว็บหลัก)
+   # 4. ตัวจัดการไฟล์ (รันที่พอร์ต 8099 จัดการไฟล์ของเว็บหลัก)
   filemanager:
     image: filebrowser/filebrowser:latest
     container_name: event-filemanager
     user: "0:0"
     restart: always
     ports:
-      - "8099:80" # <-- เรียกจัดการไฟล์ผ่านลิงก์ http://localhost:8099
+      - "8099:80"
     volumes:
-      - .:/srv # แมปโฟลเดอร์ปัจจุบันเข้ามา
+      - .:/srv
     networks:
       - event-net
     entrypoint: >
       sh -c "
+      umask 000 &&
       chmod -R 777 /srv &&
       rm -f /tmp/filebrowser.db &&
       filebrowser config init --database=/tmp/filebrowser.db &&
       filebrowser users add admin admin12345678 --perm.admin=true --database=/tmp/filebrowser.db &&
       filebrowser --root=/srv --database=/tmp/filebrowser.db --address=0.0.0.0 --port=80"
-
-  # 5. แอปสแกนเนอร์ (พอร์ต 3001)
+   
+   # 5. แอปสแกนเนอร์ (พอร์ต 3001)
   scanner-app:
     image: node:18-alpine
     container_name: event-scanner
