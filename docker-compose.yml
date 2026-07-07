@@ -7,14 +7,14 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: event_db
-      TZ: Asia/Bangkok  # เพิ่มบรรทัดนี้เพื่อให้ Database เก็บเวลาไทยด้วย
+      TZ: Asia/Bangkok
     command: --default-time-zone="+07:00"
     volumes:
       - db_data:/var/lib/mysql
     networks:
       - event-net
 
-  # 2. phpMyAdmin (รันปกติที่ 8081)
+  # 2. phpMyAdmin (รันที่พอร์ต 8082)
   phpmyadmin:
     image: phpmyadmin:latest
     container_name: event-phpmyadmin
@@ -29,16 +29,15 @@ services:
     networks:
       - event-net
 
-  # 3. เว็บเซิร์ฟเวอร์ (รันที่ 8080)
+  # 3. เว็บเซิร์ฟเวอร์ (เปิดผ่านพอร์ต 8087)
   web:
     image: php:8.1-apache
     container_name: event-web
     restart: always
     ports:
-      - "8087:80"
+      - "8087:80" # <-- เรียกเปิดเว็บหลักผ่านลิงก์ http://localhost:8087
     volumes:
       - .:/var/www/html
-    # ปรับเหลือแค่นี้ เพื่อแก้ปัญหา Permission Denied
     command: >
       sh -c "chmod -R 777 /var/www/html && 
       echo 'ServerName localhost' >> /etc/apache2/apache2.conf && 
@@ -47,27 +46,27 @@ services:
     networks:
       - event-net
       
-  # 4. ตัวจัดการไฟล์ (รันปกติที่ 8099)
+  # 4. ตัวจัดการไฟล์ (รันที่พอร์ต 8099 จัดการไฟล์ของเว็บหลัก)
   filemanager:
     image: filebrowser/filebrowser:latest
     container_name: event-filemanager
     user: "0:0"
     restart: always
     ports:
-      - "8099:80"
+      - "8099:80" # <-- เรียกจัดการไฟล์ผ่านลิงก์ http://localhost:8099
     volumes:
-      - .:/srv
-    # 🟢 เพิ่มคำสั่ง rm -f /tmp/filebrowser.db เพื่อล้างฐานข้อมูลเก่าที่ค้างอยู่ทิ้งก่อนเริ่มใหม่
+      - .:/srv # แมปโฟลเดอร์ปัจจุบันเข้ามา
+    networks:
+      - event-net
     entrypoint: >
       sh -c "
-      chmod -R 755 /srv &&
+      chmod -R 777 /srv &&
       rm -f /tmp/filebrowser.db &&
       filebrowser config init --database=/tmp/filebrowser.db &&
       filebrowser users add admin admin12345678 --perm.admin=true --database=/tmp/filebrowser.db &&
       filebrowser --root=/srv --database=/tmp/filebrowser.db --address=0.0.0.0 --port=80"
-    networks:
-      - event-net
-  # 5. แอปสแกนเนอร์ (เปลี่ยนเป็นพอร์ต 3001)
+
+  # 5. แอปสแกนเนอร์ (พอร์ต 3001)
   scanner-app:
     image: node:18-alpine
     container_name: event-scanner
@@ -76,12 +75,11 @@ services:
     ports:
       - "3001:3001"
     environment:
-      TZ: Asia/Bangkok  # เพิ่มบรรทัดนี้
+      TZ: Asia/Bangkok
     volumes:
       - ./scanner-app:/app
     depends_on:
       - db
-    # สั่งให้ npm install ก่อนรันเสมอเพื่อป้องกันกรณีขาด Library
     command: sh -c "npm install && npm start"
     networks:
       - event-net
